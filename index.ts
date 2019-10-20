@@ -96,7 +96,7 @@ class KonvaSelection {
   /**
    * Create bounding group to get absolute selection clientRect
    */
-  createBounding(rotation: number): Konva.Group {
+  createBounding(): Konva.Group {
     const bounding: Konva.Group = new Konva.Group();
 
     this.nodes.forEach((node: Konva.Node) => {
