@@ -2,7 +2,7 @@ import Konva from 'konva';
 import { IRect } from 'konva/types/types';
 import { Observable, Subject } from 'rxjs';
 
-function decompose(mat) {
+function decompose(mat, layer: Konva.Layer) {
   var a = mat[0];
   var b = mat[1];
   var c = mat[2];
@@ -11,10 +11,12 @@ function decompose(mat) {
   var f = mat[5];
 
   var delta = a * d - b * c;
+  const position = layer.getAbsolutePosition();
+  const scale = layer.getAbsoluteScale();
 
   let result = {
-    x: e,
-    y: f,
+    x: (e - position.x) / scale.x,
+    y: (f - position.y) / scale.y,
     rotation: 0,
     scaleX: 0,
     scaleY: 0,
@@ -25,15 +27,15 @@ function decompose(mat) {
   if (a != 0 || b != 0) {
     var r = Math.sqrt(a * a + b * b);
     result.rotation = b > 0 ? Math.acos(a / r) : -Math.acos(a / r);
-    result.scaleX = r;
-    result.scaleY = delta / r;
+    result.scaleX = r / scale.x;
+    result.scaleY = delta / r / scale.y;
     result.skewX = Math.atan((a * c + b * d) / (r * r));
   } else if (c != 0 || d != 0) {
     var s = Math.sqrt(c * c + d * d);
     result.rotation =
       Math.PI / 2 - (d > 0 ? Math.acos(-c / s) : -Math.acos(c / s));
-    result.scaleX = delta / s
-    result.scaleY = s;
+    result.scaleX = delta / s / scale.x;
+    result.scaleY = s / scale.y;
     result.skewX = 0
     result.skewY = Math.atan((a * c + b * d) / (s * s));
   } else {
@@ -105,6 +107,9 @@ class KonvaSelection {
       bounding.add(clone);
     });
 
+    bounding.visible(false);
+    this.layer.add(bounding);
+
     return bounding;
   }
 
@@ -161,13 +166,13 @@ class KonvaSelection {
           }
 
           this.add(e.target);
-
-          if (!exist) {
-            this.updateTransformer();
-          }
+          this.updateTransformer();
         }
 
         layer.batchDraw();
+      })
+      .on('wheel', () => {
+        this.updateTransformer();
       });
   }
 
@@ -200,7 +205,7 @@ class KonvaSelection {
             node
               .setAttrs(
                 decompose(
-                  child.getAbsoluteTransform().getMatrix()
+                  child.getAbsoluteTransform().getMatrix(), this.layer
                 )
               );
           }          
@@ -228,7 +233,7 @@ class KonvaSelection {
     this.transformer
       .attachTo(isGroup 
         ? this.nodes.values().next().value 
-        : this.createBounding(rotation)
+        : this.createBounding()
       )
       .forceUpdate();  
   }
@@ -247,7 +252,8 @@ class KonvaSelection {
 const stage = new Konva.Stage({
   container: 'container',
   width: window.innerWidth,
-  height: window.innerHeight
+  height: window.innerHeight,
+  draggable: true
 });
 
 const layer = new Konva.Layer();
@@ -317,4 +323,36 @@ bottom.onclick = () => {
     layer.batchDraw();
   })
 }
+
+const scaleBy = 1.04;
+
+stage.on('wheel', e => {
+  e.evt.preventDefault();
+  var oldScale = stage.scaleX();
+
+  var mousePointTo = {
+    x: stage.getPointerPosition().x / oldScale - stage.x() / oldScale,
+    y: stage.getPointerPosition().y / oldScale - stage.y() / oldScale
+  };
+
+  var newScale =
+    e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
+  stage.scale({ x: newScale, y: newScale });
+
+  var newPos = {
+    x:
+      -(mousePointTo.x - stage.getPointerPosition().x / newScale) *
+      newScale,
+    y:
+      -(mousePointTo.y - stage.getPointerPosition().y / newScale) *
+      newScale
+  };
+
+  stage.find('Transformer').each((n) => {
+    console.log(n);
+  })
+
+  stage.position(newPos);
+  stage.batchDraw();
+});
 
