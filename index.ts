@@ -2,6 +2,7 @@ import Konva from 'konva';
 import { IRect, Vector2d } from 'konva/types/types';
 import { Observable, Subject } from 'rxjs';
 
+// Solution little improved with layer relative scale (zoom) taken from https://stackoverflow.com/questions/56866900/konvajs-how-to-keep-the-position-and-rotation-of-the-shape-in-the-group-after-d
 function decompose(mat, layer: Konva.Layer) {
   var a = mat[0];
   var b = mat[1];
@@ -47,6 +48,7 @@ function decompose(mat, layer: Konva.Layer) {
 }
 
 class KonvaSelection {
+  private readonly ORIGINAL_INDEX_ATTR = 'originalIndex';
   private selectionChange$: Subject<any> = new Subject();
   private bounding: Konva.Group;
   private oldPosition: Vector2d;
@@ -71,12 +73,16 @@ class KonvaSelection {
     }
   }
 
+  /**
+   * Observe selection change event
+   */
   change(): Observable<any> {
     return this.selectionChange$.asObservable();
   }
 
   /**
    * Add node to selection list
+   * @param node
    */
   add(node: Konva.Node): void {
     if (!this.nodes.has(node._id)) {
@@ -84,7 +90,6 @@ class KonvaSelection {
       this.selectionChange$.next(this.nodes);
 
       if (!this.transformer) {
-        console.log(this.layer);
         this.layer.add(this.createTransformer());
       }
     }
@@ -92,6 +97,7 @@ class KonvaSelection {
 
   /**
    * Remove node from selection list
+   * @param node
    */
   remove(node: Konva.Node): void {
     this.nodes.delete(node._id);
@@ -99,7 +105,7 @@ class KonvaSelection {
   }
 
   /**
-   * Create bounding group to get absolute selection clientRect
+   * Create bounding group for transformer node update
    */
   createBounding(): Konva.Group {
     if (this.bounding) {
@@ -110,7 +116,7 @@ class KonvaSelection {
 
     this.nodes.forEach((node: Konva.Node) => {
       const clone: Konva.Shape = node.clone();
-      clone.setAttr('originalIndex', node._id);
+      clone.setAttr(this.ORIGINAL_INDEX_ATTR, node._id);
       this.bounding.add(clone);
     });
 
@@ -123,9 +129,10 @@ class KonvaSelection {
   /**
    * Init selection event
    */
-  initializeEvent() {
+  initializeEvent(): void {
     const stage: Konva.Stage = this.layer.getStage();
 
+    // Solution little improved taken from https://stackoverflow.com/questions/44958281/drag-selection-of-elements-not-in-group-in-konvajs
     this.layer.getLayer()
       .on('dragstart.konva-selection', (e) => {
         this.oldPosition = e.target.position();
@@ -150,28 +157,31 @@ class KonvaSelection {
 
     stage
       .on('mousedown.konva-selection', (e) => {
+
+        // Selection process onmousedown event
         if (e.target === stage) {
+
+          // Deselect all
           this.clear();
         }
 
         if (e.target.hasName('entity')) {
-          let exist: boolean = false;
 
-          this.nodes.forEach((n: Konva.Node) => {
-            if (n === e.target) {
-              exist = true;
-            }
-          });
-
-          if (!e.evt.shiftKey && !exist) {
+          // Use shift key for multiple selection
+          if (!e.evt.shiftKey && !this.nodes.has(e.target._id)) {
             this.clear();
           }
 
+          // Add node to selection
           this.add(e.target);
+
+          // set group or node and force transformer update with new dimensions
           this.updateTransformer();
         }
       })
       .on('wheel', () => {
+
+        // Update transformer when scale stage
         this.updateTransformer();
       });
   }
@@ -184,10 +194,12 @@ class KonvaSelection {
 
     this.transformer
       .on('transform', (e) => {
+
+        // If multiple selection, retrieve absolute position from group context for each node
         const group: Konva.Node = this.transformer.getNode();
 
         for (const child of group.children.toArray()) {
-          const node: Konva.Node = this.nodes.get(child.attrs.originalIndex);
+          const node: Konva.Node = this.nodes.get(child.attrs[this.ORIGINAL_INDEX_ATTR]);
 
           if (node) {
             node
@@ -203,27 +215,33 @@ class KonvaSelection {
     return this.transformer;
   }
 
+  /**
+   * Check if multiple selection
+   */
   isGroup(): boolean {
     return this.nodes.size > 1;
   }
 
   /**
-   * Update transformer with new bounding client rect
+   * Update transformer with node or bounding group
    */
   updateTransformer(): void {
     if (!this.transformer) {
       return;
     }
 
+    // Attach node or bounding group if selection is multiple
     this.transformer
-      .attachTo(this.nodes.size === 1 
+      .attachTo(!this.isGroup()
         ? this.nodes.values().next().value 
         : this.createBounding()
       )
       .forceUpdate();  
   }
 
-  // Clear transformer and clear selection
+  /**
+   * Clear transformer and clear selection
+   */
   clear(): void {
     if (this.transformer) {
       this.transformer.destroy();
@@ -285,7 +303,7 @@ if (zIndex) {
     zIndex.appendChild(option);
   }
 
-  zIndex.onchange = (e) => {
+  zIndex.onchange = (e: any) => {
     selection.nodes.forEach((n) => n.zIndex(+e.target.value));
     selection.transformer.zIndex(3)
     layer.batchDraw();
@@ -294,7 +312,6 @@ if (zIndex) {
   selection
     .change()
     .subscribe((s: Map<number, Konva.Node>) => {
-      console.log(s)
       if (s.size === 1) {
         zIndex.value = s.values().next().value.zIndex();
       }
@@ -305,7 +322,6 @@ const top: HTMLButtonElement = document.querySelector('#top');
 const bottom: HTMLButtonElement = document.querySelector('#bottom');
 
 top.onclick = () => {
-  console.log(selection);
   selection.nodes.forEach((n: Konva.Node) => {
     n.moveToTop();
     selection.transformer.zIndex(3);
@@ -344,10 +360,6 @@ stage.on('wheel', e => {
       -(mousePointTo.y - stage.getPointerPosition().y / newScale) *
       newScale
   };
-
-  stage.find('Transformer').each((n) => {
-    console.log(n);
-  })
 
   stage.position(newPos);
   stage.batchDraw();
