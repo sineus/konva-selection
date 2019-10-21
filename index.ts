@@ -49,11 +49,11 @@ function decompose(mat, layer: Konva.Layer) {
 class KonvaSelection {
   private selectionChange$: Subject<any> = new Subject();
 
-  layer: Konva.Layer;
+  layer: Konva.Group;
   nodes: Map<number, Konva.Node>;
   transformer: Konva.Transformer;
 
-  constructor(layer: Konva.Layer, nodes?: Array<Konva.Node>) {
+  constructor(layer: Konva.Group, nodes?: Array<Konva.Node>) {
 
     this.nodes = new Map();
     this.layer = layer;
@@ -121,7 +121,7 @@ class KonvaSelection {
     let oldY: number;
     const stage: Konva.Stage = this.layer.getStage();
 
-    this.layer
+    this.layer.getLayer()
       .on('dragstart.konva-selection', (e) => {
         oldX = e.target.x();
         oldY = e.target.y();
@@ -155,7 +155,7 @@ class KonvaSelection {
 
           let exist: boolean = false;
 
-          selection.nodes.forEach((n: Konva.Node) => {
+          this.nodes.forEach((n: Konva.Node) => {
             if (n === e.target) {
               exist = true;
             }
@@ -168,8 +168,6 @@ class KonvaSelection {
           this.add(e.target);
           this.updateTransformer();
         }
-
-        layer.batchDraw();
       })
       .on('wheel', () => {
         this.updateTransformer();
@@ -205,7 +203,7 @@ class KonvaSelection {
             node
               .setAttrs(
                 decompose(
-                  child.getAbsoluteTransform().getMatrix(), this.layer
+                  child.getAbsoluteTransform().getMatrix(), this.layer.getLayer() as Konva.Layer
                 )
               );
           }          
@@ -259,23 +257,31 @@ const stage = new Konva.Stage({
 const layer = new Konva.Layer();
 stage.add(layer);
 
-const selection = new KonvaSelection(layer);
+const layer1 = new Konva.Group();
 const colors = ['red', 'green', 'blue'];
 
 for (let i = 1; i < 4; i++) {
-  const c = new Konva.Circle({
+  const c = new Konva.Line({
+    points: [0, 0, 50, 0, 50, 50, 0, 50],
+    closed: true,
     x: 100 * i,
     y: 100 * i,
     radius: 30,
     fill: colors[Math.floor((Math.random()*colors.length))],
     draggable: true,
-    name: 'entity'
+    name: 'entity',
+    strokeScaleEnabled: false,
+    hitStrokeWidth: 5,
+    strokeWidth: 1
   });
 
-  layer.add(c);
+  layer1.add(c);
 }
 
+layer.add(layer1);
 layer.draw();
+
+const selection = new KonvaSelection(layer1);
 
 const zIndex: HTMLInputElement = document.querySelector('#z-index');
 
