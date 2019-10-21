@@ -48,6 +48,7 @@ function decompose(mat, layer: Konva.Layer) {
 
 class KonvaSelection {
   private selectionChange$: Subject<any> = new Subject();
+  private bounding: Konva.Group;
 
   layer: Konva.Group;
   nodes: Map<number, Konva.Node>;
@@ -99,18 +100,22 @@ class KonvaSelection {
    * Create bounding group to get absolute selection clientRect
    */
   createBounding(): Konva.Group {
-    const bounding: Konva.Group = new Konva.Group();
+    if (this.bounding) {
+      this.bounding.destroy();
+    }
+
+    this.bounding = new Konva.Group();
 
     this.nodes.forEach((node: Konva.Node) => {
       const clone: Konva.Shape = node.clone();
       clone.setAttr('originalIndex', node._id);
-      bounding.add(clone);
+      this.bounding.add(clone);
     });
 
-    bounding.visible(false);
-    this.layer.add(bounding);
+    this.bounding.visible(false);
+    this.layer.add(this.bounding);
 
-    return bounding;
+    return this.bounding;
   }
 
   /**
@@ -125,6 +130,8 @@ class KonvaSelection {
       .on('dragstart.konva-selection', (e) => {
         oldX = e.target.x();
         oldY = e.target.y();
+
+        console.log(this.layer.getLayer());
       })
       .on('dragmove.konva-selection', (e) => {
         const diffX = e.target.x() - oldX;
@@ -135,8 +142,10 @@ class KonvaSelection {
             return;
           }
 
-          child.x(child.x() + diffX);
-          child.y(child.y() + diffY);
+          child.move({
+            x: diffX,
+            y: diffY
+          });
         });
 
         oldX = e.target.x();
@@ -225,11 +234,8 @@ class KonvaSelection {
       return;
     }
 
-    const isGroup: boolean = this.nodes.size === 1;
-    const rotation: number = this.transformer.getRotation();
-
     this.transformer
-      .attachTo(isGroup 
+      .attachTo(this.nodes.size === 1 
         ? this.nodes.values().next().value 
         : this.createBounding()
       )
@@ -249,30 +255,34 @@ class KonvaSelection {
 
 const stage = new Konva.Stage({
   container: 'container',
-  width: window.innerWidth,
-  height: window.innerHeight,
+  width: 1920,
+  height: 1080,
   draggable: true
 });
 
 const layer = new Konva.Layer();
 stage.add(layer);
 
-const layer1 = new Konva.Group();
+const layer1 = new Konva.Group({
+  draggable: false
+});
 const colors = ['red', 'green', 'blue'];
 
 for (let i = 1; i < 4; i++) {
+  const radius = i % 2 === 0 ? 30 : 50;
+
   const c = new Konva.Line({
-    points: [0, 0, 50, 0, 50, 50, 0, 50],
+    points: [0, 0, radius, 0, radius, radius, 0, radius],
     closed: true,
     x: 100 * i,
-    y: 100 * i,
-    radius: 30,
+    y: 100,
     fill: colors[Math.floor((Math.random()*colors.length))],
     draggable: true,
     name: 'entity',
     strokeScaleEnabled: false,
     hitStrokeWidth: 5,
-    strokeWidth: 1
+    strokeWidth: 1,
+    tension: i % 2 === 0 ? 0.55 : null
   });
 
   layer1.add(c);
