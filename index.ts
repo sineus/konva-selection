@@ -2,6 +2,24 @@ import './style.css';
 import Konva from 'konva';
 import { IRect, Vector2d } from 'konva/types/types';
 import { Observable, Subject } from 'rxjs';
+import {KonvaEventListener} from "konva/types/Node";
+
+let queue = [];
+
+const Util = {
+  requestAnimFrame(callback: Function) {
+    queue.push(callback);
+    if (queue.length === 1) {
+      requestAnimationFrame(function() {
+        const anims = queue;
+        queue = [];
+        anims.forEach(function(cb) {
+          cb();
+        });
+      });
+    }
+  }
+}
 
 // Solution little improved with layer relative scale (zoom) taken from https://stackoverflow.com/questions/56866900/konvajs-how-to-keep-the-position-and-rotation-of-the-shape-in-the-group-after-d
 function decompose(mat, layer: Konva.Layer) {
@@ -251,13 +269,23 @@ class KonvaSelection {
 
     this.nodes.clear();
   }
+
+  toArray<T>(): Array<T> {
+    const output = [];
+
+    this.nodes.forEach((n: Konva.Node) => {
+      output.push(n);
+    });
+
+    return output;
+  }
 }
 
 const stage = new Konva.Stage({
   container: 'container',
   width: 400,
   height: 300,
-  draggable: true
+  draggable: false
 });
 
 const layer = new Konva.Layer();
@@ -366,3 +394,187 @@ stage.on('wheel', e => {
   stage.batchDraw();
 });
 
+const canvas: HTMLDivElement = stage.container();
+let focus: boolean;
+
+canvas.onmouseenter = () => {
+  focus = true;
+}
+
+canvas.onmouseleave = () => {
+  focus = false;
+}
+
+document.body.onkeydown = (e) => {
+  if (focus) {
+    switch(e.code) {
+      case 'Space':
+        stage.draggable(true);
+        canvas.style.cursor = 'grab';
+        break;
+    }
+  }       
+}
+
+document.body.onkeyup = (e) => {
+  stage.draggable(false);
+  canvas.style.cursor = 'default';
+}
+
+// draw a rectangle to be used as the rubber area
+const selectBox = new Konva.Rect({
+  x: 0, 
+  y: 0, 
+  width: 0, 
+  height: 0, 
+  stroke: '#1D83FF',
+  strokeWidth: .8,
+  fill: 'rgba(29, 131, 255, .2)',
+  listening: false,
+  id: 'selectBox'
+});
+
+layer1.add(selectBox)
+
+let posStart: Vector2d;
+let posNow: Vector2d;
+let mode: string = '';
+let boundings = [];
+
+function startDrag(posIn: Vector2d){
+  posStart = {
+    x: posIn.x, 
+    y: posIn.y
+  };
+  posNow = {
+    x: posIn.x, 
+    y: posIn.y
+  };
+}
+
+function updateDrag(posIn: Vector2d){ 
+  
+  // update rubber rect position
+  posNow = {
+    x: posIn.x, 
+    y: posIn.y
+  };
+
+  var posRect = reverse(posStart, posNow);
+
+  selectBox.setAttrs({
+    x: posRect.x1,
+    y: posRect.y1,
+    width: posRect.x2 - posRect.x1,
+    height: posRect.y2 - posRect.y1,
+    visible: true,  
+  });
+
+  const nodes: Array<Konva.Node> = layer1.children.toArray().filter((n) => {
+    return n.id() !== 'selectBox';
+  });
+ 
+  // run the collision check loop
+  for (let i = 0; i < nodes.length; i = i + 1){
+
+    console.log(hitCheck(nodes[i], selectBox));
+    
+    if (hitCheck(nodes[i], selectBox)){
+      if (!boundings.some((n) => n.attrs.nodeId === nodes[i]._id)) {
+        const boundingBox = new Konva.Rect({
+          x: nodes[i].x(),
+          y: nodes[i].y(),
+          width: nodes[i].width(),
+          height: nodes[i].height(),
+          stroke: 'lime',
+          nodeId: nodes[i]._id
+        });
+
+
+        Util.requestAnimFrame(() => {
+          //layer1.add(boundingBox);
+        });
+
+        boundings.push(boundingBox);
+        //layer1.add(boundingBox);
+        console.log(boundings);
+      }
+    }
+  }
+  
+  layer.draw(); // redraw any changes.
+  
+}
+
+// start the rubber drawing on mouse down.
+stage.on('mousedown', (e: any) => { 
+  for (const bounding of boundings) {
+    bounding.destroy();
+  }
+
+  boundings = [];
+  mode = 'drawing';
+  startDrag({
+    x: e.evt.layerX, 
+    y: e.evt.layerY
+  });
+});
+
+// update the rubber rect on mouse move - note use of 'mode' var to avoid drawing after mouse released.
+stage.on('mousemove', (e: any) => { 
+    if (mode === 'drawing'){
+      updateDrag({
+        x: e.evt.layerX, 
+        y: e.evt.layerY
+      });
+    }
+})
+
+stage.on('mouseup', (e: any) => { 
+    mode = '';
+    selectBox.visible(false);
+    layer.draw();
+    console.log(layer.children);
+})
+
+
+function hitCheck(shape1, shape2){
+  
+  var s1 = shape1.getClientRect(); // use this to get bounding rect for shapes other than rectangles.
+  var s2 = shape2.getClientRect();
+
+  // corners of shape 1
+  var X = s1.x;
+  var Y  = s1.y
+  var A = s1.x + s1.width;
+  var B = s1.y + s1.height;
+
+  // corners of shape 2
+  var X1 = s2.x;
+  var A1 = s2.x + s2.width;
+  var Y1 = s2.y
+  var B1 = s2.y + s2.height;
+
+  // Simple overlapping rect collision test
+  if (A<X1 || A1<X || B<Y1 || B1<Y){
+      return false
+  }
+  else{
+    return true;
+  }
+    
+}
+
+// reverse co-ords if user drags left / up
+function reverse(r1, r2){
+  var r1x = r1.x, r1y = r1.y, r2x = r2.x,  r2y = r2.y, d;
+  if (r1x > r2x ){
+    d = Math.abs(r1x - r2x);
+    r1x = r2x; r2x = r1x + d;
+  }
+  if (r1y > r2y ){
+    d = Math.abs(r1y - r2y);
+    r1y = r2y; r2y = r1y + d;
+  }
+    return ({x1: r1x, y1: r1y, x2: r2x, y2: r2y}); // return the corrected rect.     
+}
