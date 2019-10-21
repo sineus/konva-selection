@@ -1,3 +1,4 @@
+import './style.css';
 import Konva from 'konva';
 import { IRect, Vector2d } from 'konva/types/types';
 import { Observable, Subject } from 'rxjs';
@@ -254,8 +255,8 @@ class KonvaSelection {
 
 const stage = new Konva.Stage({
   container: 'container',
-  width: 1920,
-  height: 1080,
+  width: 400,
+  height: 300,
   draggable: true
 });
 

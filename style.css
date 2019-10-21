@@ -1,3 +1,35 @@
-h1, h2 {
-  font-family: Lato;
+body {
+  margin: 0;
+  padding: 15px;
+  font-family: 'Roboto';
+  font-size: 12px;
+  background-color: #252526;
+}
+
+#container {
+  border: 1px solid rgba(255, 255, 255, .1);
+  border-radius: 3px;
+  background-color: #1E1E1E;
+}
+
+.controller {
+  padding: 15px 0;
+}
+
+button {
+  border: 1px solid rgba(255, 255, 255, .1);
+  background: transparent;
+  color: white;
+  font-weight: 600;
+  line-height: 32px;
+  padding: 0 10px;
+  border-radius: 3px;
+  margin-right: 8px;
+  cursor: pointer;
+  transition: all .1s ease;
+}
+
+button:hover {
+  border: 1px solid rgb(157, 193, 255);
+  color: rgb(157, 193, 255);
 }
