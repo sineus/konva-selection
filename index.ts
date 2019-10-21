@@ -177,18 +177,6 @@ class KonvaSelection {
   }
 
   /**
-   * Get selection client rect
-   */
-  getClientRect(): IRect {
-    const bounding: Konva.Group = this.createBounding();
-
-    return bounding.getClientRect({
-      skipShadow: true,
-      skipStroke: true
-    });
-  }
-
-  /**
    * Create selection transformer
    */
   createTransformer(): Konva.Transformer {
