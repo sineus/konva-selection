@@ -1,5 +1,5 @@
 import Konva from 'konva';
-import { IRect } from 'konva/types/types';
+import { IRect, Vector2d } from 'konva/types/types';
 import { Observable, Subject } from 'rxjs';
 
 function decompose(mat, layer: Konva.Layer) {
@@ -49,6 +49,7 @@ function decompose(mat, layer: Konva.Layer) {
 class KonvaSelection {
   private selectionChange$: Subject<any> = new Subject();
   private bounding: Konva.Group;
+  private oldPosition: Vector2d;
 
   layer: Konva.Group;
   nodes: Map<number, Konva.Node>;
@@ -83,6 +84,7 @@ class KonvaSelection {
       this.selectionChange$.next(this.nodes);
 
       if (!this.transformer) {
+        console.log(this.layer);
         this.layer.add(this.createTransformer());
       }
     }
@@ -122,35 +124,27 @@ class KonvaSelection {
    * Init selection event
    */
   initializeEvent() {
-    let oldX: number;
-    let oldY: number;
     const stage: Konva.Stage = this.layer.getStage();
 
     this.layer.getLayer()
       .on('dragstart.konva-selection', (e) => {
-        oldX = e.target.x();
-        oldY = e.target.y();
-
-        console.log(this.layer.getLayer());
+        this.oldPosition = e.target.position();
       })
       .on('dragmove.konva-selection', (e) => {
-        const diffX = e.target.x() - oldX;
-        const diffY = e.target.y() - oldY;
+        const diffPos: Vector2d = {
+          x: e.target.x() - this.oldPosition.x,
+          y: e.target.y() - this.oldPosition.y
+        };
 
         this.nodes.forEach((child) => {
           if (child === e.target) {
             return;
           }
 
-          child.move({
-            x: diffX,
-            y: diffY
-          });
+          child.move(diffPos);
         });
 
-        oldX = e.target.x();
-        oldY = e.target.y();
-
+        this.oldPosition = e.target.position();
         this.updateTransformer();
       });
 
@@ -161,7 +155,6 @@ class KonvaSelection {
         }
 
         if (e.target.hasName('entity')) {
-
           let exist: boolean = false;
 
           this.nodes.forEach((n: Konva.Node) => {
