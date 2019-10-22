@@ -83,6 +83,12 @@ function reverse(r1, r2): { [k: string]: any } {
   };    
 }
 
+function getRelativePointerPosition(node: Konva.Node): Vector2d {
+  const transform = node.getAbsoluteTransform().copy();
+  transform.invert();
+  return transform.point(node.getStage().getPointerPosition());
+}
+
 class KonvaSelection {
   private readonly EVENT_NAME = 'konva-selection';
   private readonly ORIGINAL_INDEX_ATTR = 'originalIndex';
@@ -222,7 +228,12 @@ class KonvaSelection {
           this.clear();
 
           this.selectAttrs.select = true;
-          this.startDrag({ x: e.evt.layerX, y: e.evt.layerY });
+
+          if (!this.selectBox) {
+            this.layer.getLayer().add(this.createSelectBox());
+          }
+
+          this.startDrag(getRelativePointerPosition(this.layer.getLayer()));
         }
 
         if (e.target.hasName('entity')) {
@@ -238,7 +249,7 @@ class KonvaSelection {
       })
       .on('mousemove.' + this.EVENT_NAME, (e: any) => { 
           if (this.selectAttrs.select){
-            this.updateDrag({ x: e.evt.layerX, y: e.evt.layerY });
+            this.updateDrag(getRelativePointerPosition(this.layer.getLayer()));
           }
       })
       .on('mouseup.' + this.EVENT_NAME, (e: any) => { 
@@ -332,10 +343,6 @@ class KonvaSelection {
    * Set cursor position for select box
    */
   startDrag(posIn: Vector2d): void {
-    if (!this.selectBox) {
-      this.layer.getLayer().add(this.createSelectBox());
-    }
-
     this.selectAttrs.posStart = {
       x: posIn.x, 
       y: posIn.y
@@ -350,7 +357,6 @@ class KonvaSelection {
    * Update select box dimension when dragging
    */
   updateDrag(posIn: Vector2d): void { 
-    
     this.selectAttrs.posNow = {
       x: posIn.x, 
       y: posIn.y
