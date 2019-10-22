@@ -502,11 +502,13 @@ function updateDrag(posIn: Vector2d){
 
 stage
   .on('mousedown', (e: any) => { 
-    select = true;
-    startDrag({
-      x: e.evt.layerX, 
-      y: e.evt.layerY
-    });
+    if (!e.target.hasName('entity')) {
+      select = true;
+      startDrag({
+        x: e.evt.layerX, 
+        y: e.evt.layerY
+      });
+    }
   })
   .on('mousemove', (e: any) => { 
       if (select){
