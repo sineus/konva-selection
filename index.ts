@@ -111,6 +111,9 @@ class KonvaSelection {
       if (!this.transformer) {
         this.layer.add(this.createTransformer());
       }
+
+      // set group or node and force transformer update with new dimensions
+      this.updateTransformer();
     }
   }
 
@@ -121,6 +124,12 @@ class KonvaSelection {
   remove(node: Konva.Node): void {
     this.nodes.delete(node._id);
     this.selectionChange$.next(this.nodes);
+
+    if (this.transformer) {
+
+      // set group or node and force transformer update with new dimensions
+      this.updateTransformer();
+    }
   }
 
   /**
@@ -193,9 +202,6 @@ class KonvaSelection {
 
           // Add node to selection
           this.add(e.target);
-
-          // set group or node and force transformer update with new dimensions
-          this.updateTransformer();
         }
       })
       .on('wheel', () => {
@@ -438,8 +444,7 @@ layer1.add(selectBox)
 
 let posStart: Vector2d;
 let posNow: Vector2d;
-let mode: string = '';
-let boundings = [];
+let select: boolean;
 
 function startDrag(posIn: Vector2d){
   posStart = {
@@ -473,96 +478,57 @@ function updateDrag(posIn: Vector2d){
   const nodes: Array<Konva.Node> = layer1.children.toArray().filter((n) => {
     return n.id() !== 'selectBox';
   });
+
+  const selectBoxRect = selectBox.getClientRect({
+    skipStroke: true,
+    skipShadow: true
+  });
  
   // run the collision check loop
   for (let i = 0; i < nodes.length; i = i + 1){
-
-    console.log(hitCheck(nodes[i], selectBox));
-    
-    if (hitCheck(nodes[i], selectBox)){
-      if (!boundings.some((n) => n.attrs.nodeId === nodes[i]._id)) {
-        const boundingBox = new Konva.Rect({
-          x: nodes[i].x(),
-          y: nodes[i].y(),
-          width: nodes[i].width(),
-          height: nodes[i].height(),
-          stroke: 'lime',
-          nodeId: nodes[i]._id
-        });
-
-
-        Util.requestAnimFrame(() => {
-          //layer1.add(boundingBox);
-        });
-
-        boundings.push(boundingBox);
-        //layer1.add(boundingBox);
-        console.log(boundings);
-      }
+    if (
+      haveIntersection(nodes[i].getClientRect(), selectBoxRect)
+      && nodes[i].hasName('entity')
+    ) {
+      selection.add(nodes[i]);
+    } else {
+      selection.remove(nodes[i]);
     }
   }
   
-  layer.draw(); // redraw any changes.
+  layer.draw();
   
 }
 
-// start the rubber drawing on mouse down.
-stage.on('mousedown', (e: any) => { 
-  for (const bounding of boundings) {
-    bounding.destroy();
-  }
-
-  boundings = [];
-  mode = 'drawing';
-  startDrag({
-    x: e.evt.layerX, 
-    y: e.evt.layerY
+stage
+  .on('mousedown', (e: any) => { 
+    select = true;
+    startDrag({
+      x: e.evt.layerX, 
+      y: e.evt.layerY
+    });
+  })
+  .on('mousemove', (e: any) => { 
+      if (select){
+        updateDrag({
+          x: e.evt.layerX, 
+          y: e.evt.layerY
+        });
+      }
+  })
+  .on('mouseup', (e: any) => { 
+      select = false;
+      selectBox.visible(false);
+      layer.draw();
   });
-});
 
-// update the rubber rect on mouse move - note use of 'mode' var to avoid drawing after mouse released.
-stage.on('mousemove', (e: any) => { 
-    if (mode === 'drawing'){
-      updateDrag({
-        x: e.evt.layerX, 
-        y: e.evt.layerY
-      });
-    }
-})
-
-stage.on('mouseup', (e: any) => { 
-    mode = '';
-    selectBox.visible(false);
-    layer.draw();
-    console.log(layer.children);
-})
-
-
-function hitCheck(shape1, shape2){
-  
-  var s1 = shape1.getClientRect(); // use this to get bounding rect for shapes other than rectangles.
-  var s2 = shape2.getClientRect();
-
-  // corners of shape 1
-  var X = s1.x;
-  var Y  = s1.y
-  var A = s1.x + s1.width;
-  var B = s1.y + s1.height;
-
-  // corners of shape 2
-  var X1 = s2.x;
-  var A1 = s2.x + s2.width;
-  var Y1 = s2.y
-  var B1 = s2.y + s2.height;
-
-  // Simple overlapping rect collision test
-  if (A<X1 || A1<X || B<Y1 || B1<Y){
-      return false
-  }
-  else{
-    return true;
-  }
-    
+function haveIntersection(r1, r2): boolean {
+  return !(
+    r2.x > r1.x + r1.width ||
+    r2.x + r2.width < r1.x ||
+    r2.y > r1.y + r1.height ||
+    r2.y + r2.height < r1.y
+  );
 }
 
 // reverse co-ords if user drags left / up
