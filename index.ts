@@ -4,23 +4,6 @@ import { IRect, Vector2d } from 'konva/types/types';
 import { Observable, Subject } from 'rxjs';
 import {KonvaEventListener} from "konva/types/Node";
 
-let queue = [];
-
-const Util = {
-  requestAnimFrame(callback: Function) {
-    queue.push(callback);
-    if (queue.length === 1) {
-      requestAnimationFrame(function() {
-        const anims = queue;
-        queue = [];
-        anims.forEach(function(cb) {
-          cb();
-        });
-      });
-    }
-  }
-}
-
 // Solution little improved with layer relative scale (zoom) taken from https://stackoverflow.com/questions/56866900/konvajs-how-to-keep-the-position-and-rotation-of-the-shape-in-the-group-after-d
 function decompose(mat, layer: Konva.Layer) {
   var a = mat[0];
@@ -66,11 +49,56 @@ function decompose(mat, layer: Konva.Layer) {
   return result;
 }
 
+function haveIntersection(r1, r2): boolean {
+  return !(
+    r2.x > r1.x + r1.width ||
+    r2.x + r2.width < r1.x ||
+    r2.y > r1.y + r1.height ||
+    r2.y + r2.height < r1.y
+  );
+}
+
+function reverse(r1, r2): { [k: string]: any } {
+  let r1x: number = r1.x;
+  let r1y: number = r1.y;
+  let r2x: number = r2.x;
+  let r2y: number = r2.y;
+  let d: number;
+
+  if (r1x > r2x ){
+    d = Math.abs(r1x - r2x);
+    r1x = r2x; r2x = r1x + d;
+  }
+
+  if (r1y > r2y ){
+    d = Math.abs(r1y - r2y);
+    r1y = r2y; r2y = r1y + d;
+  }
+
+  return {
+    x1: r1x, 
+    y1: r1y, 
+    x2: r2x, 
+    y2: r2y
+  };    
+}
+
 class KonvaSelection {
+  private readonly EVENT_NAME = 'konva-selection';
   private readonly ORIGINAL_INDEX_ATTR = 'originalIndex';
   private selectionChange$: Subject<any> = new Subject();
   private bounding: Konva.Group;
+  private selectBox: Konva.Rect;
   private oldPosition: Vector2d;
+  private selectAttrs: { 
+    posStart: Vector2d, 
+    posNow: Vector2d, 
+    select: boolean
+  } = {
+    posStart: null,
+    posNow: null,
+    select: false
+  }
 
   layer: Konva.Group;
   nodes: Map<number, Konva.Node>;
@@ -159,13 +187,14 @@ class KonvaSelection {
    */
   initializeEvent(): void {
     const stage: Konva.Stage = this.layer.getStage();
+    const layer: Konva.Layer = this.layer.getLayer() as Konva.Layer;
 
     // Solution little improved taken from https://stackoverflow.com/questions/44958281/drag-selection-of-elements-not-in-group-in-konvajs
     this.layer.getLayer()
-      .on('dragstart.konva-selection', (e) => {
+      .on('dragstart.' + this.EVENT_NAME, (e) => {
         this.oldPosition = e.target.position();
       })
-      .on('dragmove.konva-selection', (e) => {
+      .on('dragmove.' + this.EVENT_NAME, (e) => {
         const diffPos: Vector2d = {
           x: e.target.x() - this.oldPosition.x,
           y: e.target.y() - this.oldPosition.y
@@ -184,13 +213,16 @@ class KonvaSelection {
       });
 
     stage
-      .on('mousedown.konva-selection', (e) => {
+      .on('mousedown.' + this.EVENT_NAME, (e) => {
 
         // Selection process onmousedown event
         if (e.target === stage) {
 
           // Deselect all
           this.clear();
+
+          this.selectAttrs.select = true;
+          this.startDrag({ x: e.evt.layerX, y: e.evt.layerY });
         }
 
         if (e.target.hasName('entity')) {
@@ -204,7 +236,20 @@ class KonvaSelection {
           this.add(e.target);
         }
       })
-      .on('wheel', () => {
+      .on('mousemove.' + this.EVENT_NAME, (e: any) => { 
+          if (this.selectAttrs.select){
+            this.updateDrag({ x: e.evt.layerX, y: e.evt.layerY });
+          }
+      })
+      .on('mouseup.' + this.EVENT_NAME, (e: any) => { 
+        if (this.selectAttrs.select) {
+          this.selectAttrs.select = false;
+          this.selectBox.destroy();
+          this.selectBox = null;
+          this.layer.getLayer().draw();
+        }
+      })
+      .on('wheel.' + this.EVENT_NAME, () => {
 
         // Update transformer when scale stage
         this.updateTransformer();
@@ -218,7 +263,7 @@ class KonvaSelection {
     this.transformer = new Konva.Transformer();
 
     this.transformer
-      .on('transform', (e) => {
+      .on('transform.' + this.EVENT_NAME, (e) => {
 
         // If multiple selection, retrieve absolute position from group context for each node
         const group: Konva.Node = this.transformer.getNode();
@@ -265,6 +310,87 @@ class KonvaSelection {
   }
 
   /**
+   * Create select box
+   */
+  createSelectBox(): Konva.Rect {
+    this.selectBox = new Konva.Rect({
+      x: 0, 
+      y: 0, 
+      width: 0, 
+      height: 0, 
+      stroke: '#1D83FF',
+      strokeWidth: .8,
+      fill: 'rgba(29, 131, 255, .2)',
+      listening: false,
+      id: 'selectBox'
+    });
+
+    return this.selectBox;
+  }
+
+  /**
+   * Set cursor position for select box
+   */
+  startDrag(posIn: Vector2d): void {
+    if (!this.selectBox) {
+      this.layer.getLayer().add(this.createSelectBox());
+    }
+
+    this.selectAttrs.posStart = {
+      x: posIn.x, 
+      y: posIn.y
+    };
+    this.selectAttrs.posNow = {
+      x: posIn.x, 
+      y: posIn.y
+    };
+  }
+
+  /**
+   * Update select box dimension when dragging
+   */
+  updateDrag(posIn: Vector2d): void { 
+    
+    this.selectAttrs.posNow = {
+      x: posIn.x, 
+      y: posIn.y
+    };
+
+    var posRect = reverse(this.selectAttrs.posStart, this.selectAttrs.posNow);
+
+    this.selectBox.setAttrs({
+      x: posRect.x1,
+      y: posRect.y1,
+      width: posRect.x2 - posRect.x1,
+      height: posRect.y2 - posRect.y1,
+      visible: true,  
+    });
+
+    const nodes: Array<Konva.Node> = layer1.children.toArray().filter((n) => {
+      return n.id() !== 'selectBox';
+    });
+
+    const selectBoxRect = this.selectBox.getClientRect({
+      skipStroke: true,
+      skipShadow: true
+    });
+  
+    // run the collision check loop
+    for (let i = 0; i < nodes.length; i = i + 1){
+      if (
+        haveIntersection(nodes[i].getClientRect(), selectBoxRect)
+        && nodes[i].hasName('entity')
+      ) {
+        this.add(nodes[i]);
+      } else {
+        this.remove(nodes[i]);
+      }
+    }
+    
+    layer.draw(); 
+  }
+
+  /**
    * Clear transformer and clear selection
    */
   clear(): void {
@@ -276,6 +402,9 @@ class KonvaSelection {
     this.nodes.clear();
   }
 
+  /**
+   * Transform nodes map to array of nodes
+   */
   toArray<T>(): Array<T> {
     const output = [];
 
@@ -425,124 +554,4 @@ document.body.onkeydown = (e) => {
 document.body.onkeyup = (e) => {
   stage.draggable(false);
   canvas.style.cursor = 'default';
-}
-
-// draw a rectangle to be used as the rubber area
-const selectBox = new Konva.Rect({
-  x: 0, 
-  y: 0, 
-  width: 0, 
-  height: 0, 
-  stroke: '#1D83FF',
-  strokeWidth: .8,
-  fill: 'rgba(29, 131, 255, .2)',
-  listening: false,
-  id: 'selectBox'
-});
-
-layer1.add(selectBox)
-
-let posStart: Vector2d;
-let posNow: Vector2d;
-let select: boolean;
-
-function startDrag(posIn: Vector2d){
-  posStart = {
-    x: posIn.x, 
-    y: posIn.y
-  };
-  posNow = {
-    x: posIn.x, 
-    y: posIn.y
-  };
-}
-
-function updateDrag(posIn: Vector2d){ 
-  
-  // update rubber rect position
-  posNow = {
-    x: posIn.x, 
-    y: posIn.y
-  };
-
-  var posRect = reverse(posStart, posNow);
-
-  selectBox.setAttrs({
-    x: posRect.x1,
-    y: posRect.y1,
-    width: posRect.x2 - posRect.x1,
-    height: posRect.y2 - posRect.y1,
-    visible: true,  
-  });
-
-  const nodes: Array<Konva.Node> = layer1.children.toArray().filter((n) => {
-    return n.id() !== 'selectBox';
-  });
-
-  const selectBoxRect = selectBox.getClientRect({
-    skipStroke: true,
-    skipShadow: true
-  });
- 
-  // run the collision check loop
-  for (let i = 0; i < nodes.length; i = i + 1){
-    if (
-      haveIntersection(nodes[i].getClientRect(), selectBoxRect)
-      && nodes[i].hasName('entity')
-    ) {
-      selection.add(nodes[i]);
-    } else {
-      selection.remove(nodes[i]);
-    }
-  }
-  
-  layer.draw();
-  
-}
-
-stage
-  .on('mousedown', (e: any) => { 
-    if (e.target === stage) {
-      select = true;
-      startDrag({
-        x: e.evt.layerX, 
-        y: e.evt.layerY
-      });
-    }
-  })
-  .on('mousemove', (e: any) => { 
-      if (select){
-        updateDrag({
-          x: e.evt.layerX, 
-          y: e.evt.layerY
-        });
-      }
-  })
-  .on('mouseup', (e: any) => { 
-      select = false;
-      selectBox.visible(false);
-      layer.draw();
-  });
-
-function haveIntersection(r1, r2): boolean {
-  return !(
-    r2.x > r1.x + r1.width ||
-    r2.x + r2.width < r1.x ||
-    r2.y > r1.y + r1.height ||
-    r2.y + r2.height < r1.y
-  );
-}
-
-// reverse co-ords if user drags left / up
-function reverse(r1, r2){
-  var r1x = r1.x, r1y = r1.y, r2x = r2.x,  r2y = r2.y, d;
-  if (r1x > r2x ){
-    d = Math.abs(r1x - r2x);
-    r1x = r2x; r2x = r1x + d;
-  }
-  if (r1y > r2y ){
-    d = Math.abs(r1y - r2y);
-    r1y = r2y; r2y = r1y + d;
-  }
-    return ({x1: r1x, y1: r1y, x2: r2x, y2: r2y}); // return the corrected rect.     
 }
