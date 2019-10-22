@@ -424,7 +424,7 @@ class KonvaSelection {
 
 const stage = new Konva.Stage({
   container: 'container',
-  width: 400,
+  width: 658,
   height: 300,
   draggable: false
 });
