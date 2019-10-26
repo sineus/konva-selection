@@ -1,7 +1,7 @@
 import './style.css';
 import Konva from 'konva';
 import { IRect, Vector2d } from 'konva/types/types';
-import { Observable, Subject } from 'rxjs';
+import { Observable, Subject, fromEvent, Subscription } from 'rxjs';
 import {KonvaEventListener} from "konva/types/Node";
 
 // Solution little improved with layer relative scale (zoom) taken from https://stackoverflow.com/questions/56866900/konvajs-how-to-keep-the-position-and-rotation-of-the-shape-in-the-group-after-d
@@ -420,6 +420,19 @@ class KonvaSelection {
 
     return output;
   }
+
+  /**
+   * Clone nodes map to array of nodes
+   */
+  clone<T>(): Array<T> {
+    const output = [];
+
+    this.nodes.forEach((n: Konva.Node) => {
+      output.push(n.clone());
+    });
+
+    return output;
+  }
 }
 
 const stage = new Konva.Stage({
@@ -561,3 +574,110 @@ document.body.onkeyup = (e) => {
   stage.draggable(false);
   canvas.style.cursor = 'default';
 }
+
+enum ContextToolType {
+  Copy,
+  Cut,
+  Paste
+}
+
+interface IContextToolClipboard {
+  entities: Array<Konva.Shape>;
+  type: ContextToolType;
+}
+
+interface IContextToolConfig {
+  label: string;
+  id: string;
+  handler: (
+    evt: MouseEvent, 
+    clipboard: IContextToolClipboard
+  ) => void;
+}
+
+class ContextTool {
+  contextItems: Array<IContextToolConfig>;
+  contextElement: HTMLDivElement;
+  contextSubscription: Subscription;
+  clipboard: IContextToolClipboard;
+
+  constructor(config: any) {
+    this.clipboard = {
+      entities: [],
+      type: null
+    }
+
+    this.contextSubscription = new Subscription();
+
+    this.contextSubscription.add(
+      fromEvent(document.body, 'contextmenu')
+        .subscribe((evt: MouseEvent) => {
+          evt.preventDefault();
+          console.log('ok');
+          this.contextElement = this.buildContextElement(
+            evt.clientX, 
+            evt.clientY
+          ); 
+
+          document.body.appendChild(this.contextElement);
+        })
+    );
+
+    /* this.contextSubscription.add(
+      fromEvent(document.body, 'mousedown')
+        .subscribe((evt: MouseEvent) => {
+          console.log('mouseup');
+          if (this.contextElement) {
+             this.contextElement.remove();
+          }
+        })
+    ); */
+  }
+
+  public static create(config: Array<IContextToolConfig>): ContextTool {
+    const instance: ContextTool = new ContextTool(config);
+    instance.contextItems = config;
+    return instance;
+  }
+
+  buildContextElement(x: number, y: number): HTMLDivElement {
+    const panel: HTMLDivElement = document.createElement('div');
+    panel.classList.add('context-panel');
+    
+    Object.assign(panel.style, {
+      position: 'absolute',
+      zIndex: '99999',
+      top: x + 'px',
+      left: y + 'px',
+      background: 'white',
+      width: '200px'
+    });
+
+    for (const item of this.contextItems) {
+      panel.appendChild(this.buildContextHandler(item));
+    }
+
+    return panel;
+  }
+
+  buildContextHandler(item: IContextToolConfig): HTMLDivElement {
+    const handler: HTMLDivElement = document.createElement('div');
+    handler.classList.add('context-panel-item');
+    handler.innerHTML = item.label;
+    handler.onclick = (evt: MouseEvent) => {
+      item.handler(evt, this.clipboard);
+    }
+
+    return handler;
+  }
+}
+
+const contextTool = ContextTool.create([
+  {
+    label: 'Copy',
+    id: 'copy',
+    handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
+      const copy = selection.toArray();
+    }
+  }
+]);
