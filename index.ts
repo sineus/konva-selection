@@ -665,16 +665,15 @@ class ContextTool {
     handler.classList.add('context-panel-item');
     handler.innerHTML = item.label;
     handler.onclick = (evt: MouseEvent) => {
-      this.getHandlerWrapperFn(item.handler, evt);
+      this.handlerWrapperFn(item.handler, evt);
     }
 
     return handler;
   }
 
-  getHandlerWrapperFn(handler: IContextToolHandler, evt: MouseEvent): IContextToolHandler {
-    return () => {
-      handler(evt, this.clipboard);
-    }
+  handlerWrapperFn(handler: IContextToolHandler, evt: MouseEvent) {
+    handler(evt, this.clipboard);
+    this.contextElement.remove();
   }
 }
 
@@ -683,6 +682,7 @@ const contextTool = ContextTool.create([
     label: 'Copy',
     handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
       clipboard.entities = selection.clone();
+      console.log('copy');
     }
   },
   {
@@ -690,10 +690,13 @@ const contextTool = ContextTool.create([
     handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
       if (clipboard.entities.length) {
         for (const entity of clipboard.entities) {
+          entity.x(evt.clientX);
+          entity.y(evt.clientY);
           layer1.add(entity);
         }
 
         layer.batchDraw();
+        console.log('paste');
       }
     }
   }
