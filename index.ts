@@ -586,13 +586,13 @@ interface IContextToolClipboard {
   type: ContextToolType;
 }
 
+interface IContextToolHandler {
+  (evt: MouseEvent, clipboard: IContextToolClipboard): void;
+}
+
 interface IContextToolConfig {
   label: string;
-  id: string;
-  handler: (
-    evt: MouseEvent, 
-    clipboard: IContextToolClipboard
-  ) => void;
+  handler: IContextToolHandler;
 }
 
 class ContextTool {
@@ -643,12 +643,12 @@ class ContextTool {
   buildContextElement(x: number, y: number): HTMLDivElement {
     const panel: HTMLDivElement = document.createElement('div');
     panel.classList.add('context-panel');
-    
+
     Object.assign(panel.style, {
       position: 'absolute',
       zIndex: '99999',
-      top: x + 'px',
-      left: y + 'px',
+      top: y + 'px',
+      left: x + 'px',
       background: 'white',
       width: '200px'
     });
@@ -665,19 +665,36 @@ class ContextTool {
     handler.classList.add('context-panel-item');
     handler.innerHTML = item.label;
     handler.onclick = (evt: MouseEvent) => {
-      item.handler(evt, this.clipboard);
+      this.getHandlerWrapperFn(item.handler, evt);
     }
 
     return handler;
+  }
+
+  getHandlerWrapperFn(handler: IContextToolHandler, evt: MouseEvent): IContextToolHandler {
+    return () => {
+      handler(evt, this.clipboard);
+    }
   }
 }
 
 const contextTool = ContextTool.create([
   {
     label: 'Copy',
-    id: 'copy',
     handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
-      const copy = selection.toArray();
+      clipboard.entities = selection.clone();
+    }
+  },
+  {
+    label: 'Paste',
+    handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
+      if (clipboard.entities.length) {
+        for (const entity of clipboard.entities) {
+          layer1.add(entity);
+        }
+
+        layer.batchDraw();
+      }
     }
   }
 ]);
