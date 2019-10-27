@@ -653,8 +653,10 @@ class ContextTool {
       zIndex: '99999',
       top: y + 'px',
       left: x + 'px',
-      background: 'white',
-      width: '200px'
+      background: '#252526',
+      width: '200px',
+      border: '1px solid rgba(255, 255, 255, .1)',
+      borderRadius: '3px'
     });
 
     for (const item of this.contextItems) {
@@ -668,6 +670,32 @@ class ContextTool {
     const handler: HTMLDivElement = document.createElement('div');
     handler.classList.add('context-panel-item');
     handler.innerHTML = item.label;
+
+    Object.assign(handler.style, {
+      padding: '10px',
+      transition: 'all .2s ease',
+      color: 'white',
+      cursor: 'pointer'
+    });
+
+    handler.onmouseover = () => {
+      Object.assign(handler.style, {
+        backgroundColor: '#1E1E1E'
+      });
+    }
+
+    handler.onmouseleave = () => {
+      Object.assign(handler.style, {
+        backgroundColor: 'transparent'
+      });
+    }
+
+    handler.onmousedown = () => {
+      Object.assign(handler.style, {
+        backgroundColor: 'rgba(255, 255, 255, .1)'
+      });
+    }
+
     handler.onclick = (evt: MouseEvent) => {
       evt.stopPropagation();
       this.handlerWrapperFn(item.handler, evt);
@@ -723,6 +751,7 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
         clipboard.entities = selection.clone();
         clipboard.type = ContextToolType.Copy;
         console.log('copy');
+        selection.preventSelectBox();
       }
     },
     <IContextToolActionConfig>{
@@ -734,6 +763,7 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
 
         selection.clear();
         layer.batchDraw();
+        selection.preventSelectBox();
         console.log('cut');
       }
     },
