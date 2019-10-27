@@ -253,12 +253,7 @@ class KonvaSelection {
           }
       })
       .on('mouseup.' + this.EVENT_NAME, (e: any) => { 
-        if (this.selectAttrs.select) {
-          this.selectAttrs.select = false;
-          this.selectBox.destroy();
-          this.selectBox = null;
-          this.layer.getLayer().draw();
-        }
+        this.destroySelectBox();
       })
       .on('wheel.' + this.EVENT_NAME, () => {
 
@@ -339,9 +334,16 @@ class KonvaSelection {
     return this.selectBox;
   }
 
-  preventSelectBox() {
-    this.selectAttrs.select = false;
-    this.selectBox.destroy();
+  /**
+   * Destroy select box instance
+   */
+  destroySelectBox(): void {
+    if (this.selectAttrs.select) {
+      this.selectAttrs.select = false;
+      this.selectBox.destroy();
+      this.selectBox = null;
+      this.layer.getLayer().draw();
+    }
   }
 
   /**
@@ -592,7 +594,7 @@ interface IContextToolClipboard {
 }
 
 interface IContextToolHandler {
-  (evt: MouseEvent, clipboard: IContextToolClipboard): void;
+  (position: {x: number, y: number }, clipboard: IContextToolClipboard): void;
 }
 
 interface IContextToolConfig {
@@ -605,9 +607,15 @@ interface IContextToolActionConfig {
   handler: IContextToolHandler;
 }
 
+interface IPosition {
+  x: number;
+  y: number;
+}
+
 class ContextTool {
   contextItems: Array<IContextToolActionConfig>;
   contextElement: HTMLDivElement;
+  contextElementPosition: IPosition;
   contextOverlay: HTMLDivElement;
   contextSubscription: Subscription;
   clipboard: IContextToolClipboard;
@@ -647,6 +655,11 @@ class ContextTool {
   buildContextElement(x: number, y: number): HTMLDivElement {
     const panel: HTMLDivElement = document.createElement('div');
     panel.classList.add('context-panel');
+
+    this.contextElementPosition = {
+      x: x,
+      y: y
+    };
 
     Object.assign(panel.style, {
       position: 'absolute',
@@ -698,7 +711,7 @@ class ContextTool {
 
     handler.onclick = (evt: MouseEvent) => {
       evt.stopPropagation();
-      this.handlerWrapperFn(item.handler, evt);
+      this.handlerWrapperFn(item.handler);
     }
 
     return handler;
@@ -729,8 +742,8 @@ class ContextTool {
     return overlay;
   }
 
-  handlerWrapperFn(handler: IContextToolHandler, evt: MouseEvent) {
-    handler(evt, this.clipboard);
+  handlerWrapperFn(handler: IContextToolHandler) {
+    handler(this.contextElementPosition, this.clipboard);
     
     if (this.contextElement) {
       this.contextElement.remove();
@@ -747,35 +760,35 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
   actions: [
     <IContextToolActionConfig>{
       label: 'Copy',
-      handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
+      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         clipboard.entities = selection.clone();
         clipboard.type = ContextToolType.Copy;
         console.log('copy');
-        selection.preventSelectBox();
       }
     },
     <IContextToolActionConfig>{
       label: 'Cut',
-      handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
+      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         clipboard.entities = selection.toArray();
         clipboard.type = ContextToolType.Cut;
         clipboard.entities.forEach((entity: Konva.Shape) => entity.visible(false));
 
         selection.clear();
         layer.batchDraw();
-        selection.preventSelectBox();
         console.log('cut');
       }
     },
     <IContextToolActionConfig>{
       label: 'Paste',
-      handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
+      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         if (clipboard.entities.length) {
           for (const entity of clipboard.entities) {
             entity
               .visible(true)
-              .x(evt.clientX)
-              .y(evt.clientY);
+              .x(position.x - entity.width() / 2)
+              .y(position.y - entity.height() / 2);
+
+            console.log(clipboard.type);
 
             if (clipboard.type === ContextToolType.Copy) {
               layer1.add(entity);
@@ -783,7 +796,7 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
           }
 
           layer.batchDraw();
-          selection.preventSelectBox();
+          selection.destroySelectBox();
           console.log('paste');
         }
       }
