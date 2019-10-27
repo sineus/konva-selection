@@ -731,8 +731,9 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
         clipboard.entities = selection.toArray();
         clipboard.type = ContextToolType.Cut;
         clipboard.entities.forEach((entity: Konva.Shape) => entity.visible(false));
-        layer.batchDraw();
+
         selection.clear();
+        layer.batchDraw();
         console.log('cut');
       }
     },
@@ -741,8 +742,10 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
       handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
         if (clipboard.entities.length) {
           for (const entity of clipboard.entities) {
-            entity.x(evt.clientX);
-            entity.y(evt.clientY);
+            entity
+              .visible(true)
+              .x(evt.clientX)
+              .y(evt.clientY);
 
             if (clipboard.type === ContextToolType.Copy) {
               layer1.add(entity);
