@@ -339,6 +339,11 @@ class KonvaSelection {
     return this.selectBox;
   }
 
+  preventSelectBox() {
+    this.selectAttrs.select = false;
+    this.selectBox.destroy();
+  }
+
   /**
    * Set cursor position for select box
    */
@@ -698,8 +703,14 @@ class ContextTool {
 
   handlerWrapperFn(handler: IContextToolHandler, evt: MouseEvent) {
     handler(evt, this.clipboard);
-    this.contextElement.remove();
-    this.contextOverlay.remove();
+    
+    if (this.contextElement) {
+      this.contextElement.remove();
+    }
+
+    if (this.contextOverlay) {
+      this.contextOverlay.remove();
+    }
   }
 }
 
@@ -710,7 +721,19 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
       label: 'Copy',
       handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
         clipboard.entities = selection.clone();
+        clipboard.type = ContextToolType.Copy;
         console.log('copy');
+      }
+    },
+    <IContextToolActionConfig>{
+      label: 'Cut',
+      handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
+        clipboard.entities = selection.toArray();
+        clipboard.type = ContextToolType.Cut;
+        clipboard.entities.forEach((entity: Konva.Shape) => entity.visible(false));
+        layer.batchDraw();
+        selection.clear();
+        console.log('cut');
       }
     },
     <IContextToolActionConfig>{
@@ -720,10 +743,14 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
           for (const entity of clipboard.entities) {
             entity.x(evt.clientX);
             entity.y(evt.clientY);
-            layer1.add(entity);
+
+            if (clipboard.type === ContextToolType.Copy) {
+              layer1.add(entity);
+            }
           }
 
           layer.batchDraw();
+          selection.preventSelectBox();
           console.log('paste');
         }
       }
