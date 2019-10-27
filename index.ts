@@ -507,7 +507,7 @@ const bottom: HTMLButtonElement = document.querySelector('#bottom');
 top.onclick = () => {
   selection.nodes.forEach((n: Konva.Node) => {
     n.moveToTop();
-    selection.transformer.zIndex(3);
+    selection.transformer.moveToTop();
     layer.batchDraw();
   })
 }
@@ -515,7 +515,7 @@ top.onclick = () => {
 bottom.onclick = () => {
   selection.nodes.forEach((n: Konva.Node) => {
     n.moveToBottom();
-    selection.transformer.zIndex(3);
+    selection.transformer.moveToTop();
     layer.batchDraw();
   })
 }
@@ -591,13 +591,19 @@ interface IContextToolHandler {
 }
 
 interface IContextToolConfig {
+  container: Element;
+  actions: Array<IContextToolActionConfig>;
+}
+
+interface IContextToolActionConfig {
   label: string;
   handler: IContextToolHandler;
 }
 
 class ContextTool {
-  contextItems: Array<IContextToolConfig>;
+  contextItems: Array<IContextToolActionConfig>;
   contextElement: HTMLDivElement;
+  contextOverlay: HTMLDivElement;
   contextSubscription: Subscription;
   clipboard: IContextToolClipboard;
 
@@ -610,7 +616,7 @@ class ContextTool {
     this.contextSubscription = new Subscription();
 
     this.contextSubscription.add(
-      fromEvent(document.body, 'contextmenu')
+      fromEvent(config.container, 'contextmenu')
         .subscribe((evt: MouseEvent) => {
           evt.preventDefault();
           
@@ -619,17 +625,17 @@ class ContextTool {
             evt.clientY
           ); 
 
-          const overlay: HTMLDivElement = this.buildOverlay();
+          this.contextOverlay = this.buildOverlay();
 
-          overlay.appendChild(this.contextElement);
-          document.body.appendChild(overlay);
+          this.contextOverlay.appendChild(this.contextElement);
+          document.body.appendChild(this.contextOverlay);
         })
     );
   }
 
-  public static create(config: Array<IContextToolConfig>): ContextTool {
+  public static create(config: IContextToolConfig): ContextTool {
     const instance: ContextTool = new ContextTool(config);
-    instance.contextItems = config;
+    instance.contextItems = config.actions;
     return instance;
   }
 
@@ -653,7 +659,7 @@ class ContextTool {
     return panel;
   }
 
-  buildContextHandler(item: IContextToolConfig): HTMLDivElement {
+  buildContextHandler(item: IContextToolActionConfig): HTMLDivElement {
     const handler: HTMLDivElement = document.createElement('div');
     handler.classList.add('context-panel-item');
     handler.innerHTML = item.label;
@@ -681,6 +687,10 @@ class ContextTool {
       if (this.contextElement) {
         this.contextElement.remove();
       }
+
+      if (this.contextOverlay) {
+        this.contextOverlay.remove();
+      }
     };
 
     return overlay;
@@ -689,30 +699,34 @@ class ContextTool {
   handlerWrapperFn(handler: IContextToolHandler, evt: MouseEvent) {
     handler(evt, this.clipboard);
     this.contextElement.remove();
+    this.contextOverlay.remove();
   }
 }
 
-const contextTool = ContextTool.create([
-  {
-    label: 'Copy',
-    handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
-      clipboard.entities = selection.clone();
-      console.log('copy');
-    }
-  },
-  {
-    label: 'Paste',
-    handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
-      if (clipboard.entities.length) {
-        for (const entity of clipboard.entities) {
-          entity.x(evt.clientX);
-          entity.y(evt.clientY);
-          layer1.add(entity);
-        }
+const contextTool = ContextTool.create(<IContextToolConfig>{
+  container: stage.container(),
+  actions: [
+    <IContextToolActionConfig>{
+      label: 'Copy',
+      handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
+        clipboard.entities = selection.clone();
+        console.log('copy');
+      }
+    },
+    <IContextToolActionConfig>{
+      label: 'Paste',
+      handler: (evt: MouseEvent, clipboard: IContextToolClipboard) => {
+        if (clipboard.entities.length) {
+          for (const entity of clipboard.entities) {
+            entity.x(evt.clientX);
+            entity.y(evt.clientY);
+            layer1.add(entity);
+          }
 
-        layer.batchDraw();
-        console.log('paste');
+          layer.batchDraw();
+          console.log('paste');
+        }
       }
     }
-  }
-]);
+  ]
+});
