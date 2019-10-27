@@ -613,25 +613,18 @@ class ContextTool {
       fromEvent(document.body, 'contextmenu')
         .subscribe((evt: MouseEvent) => {
           evt.preventDefault();
-          console.log('ok');
+          
           this.contextElement = this.buildContextElement(
             evt.clientX, 
             evt.clientY
           ); 
 
-          document.body.appendChild(this.contextElement);
+          const overlay: HTMLDivElement = this.buildOverlay();
+
+          overlay.appendChild(this.contextElement);
+          document.body.appendChild(overlay);
         })
     );
-
-    /* this.contextSubscription.add(
-      fromEvent(document.body, 'mousedown')
-        .subscribe((evt: MouseEvent) => {
-          console.log('mouseup');
-          if (this.contextElement) {
-             this.contextElement.remove();
-          }
-        })
-    ); */
   }
 
   public static create(config: Array<IContextToolConfig>): ContextTool {
@@ -665,10 +658,32 @@ class ContextTool {
     handler.classList.add('context-panel-item');
     handler.innerHTML = item.label;
     handler.onclick = (evt: MouseEvent) => {
+      evt.stopPropagation();
       this.handlerWrapperFn(item.handler, evt);
     }
 
     return handler;
+  }
+
+  buildOverlay(): HTMLDivElement {
+    const overlay: HTMLDivElement = document.createElement('div');
+    overlay.classList.add('context-panel-overlay');
+
+    Object.assign(overlay.style, {
+      position: 'absolute',
+      top: '0',
+      left: '0',
+      width: '100%',
+      height: '100%'
+    });
+
+    overlay.onclick = () => {
+      if (this.contextElement) {
+        this.contextElement.remove();
+      }
+    };
+
+    return overlay;
   }
 
   handlerWrapperFn(handler: IContextToolHandler, evt: MouseEvent) {
