@@ -2,7 +2,7 @@ import './style.css';
 import Konva from 'konva';
 import { IRect, Vector2d } from 'konva/types/types';
 import { Observable, Subject, fromEvent, Subscription } from 'rxjs';
-import {KonvaEventListener} from "konva/types/Node";
+import {KonvaEventListener, KonvaEventObject} from "konva/types/Node";
 
 // Solution little improved with layer relative scale (zoom) taken from https://stackoverflow.com/questions/56866900/konvajs-how-to-keep-the-position-and-rotation-of-the-shape-in-the-group-after-d
 function decompose(mat, layer: Konva.Layer) {
@@ -605,12 +605,13 @@ interface IContextToolHandler {
 }
 
 interface IContextToolConfig {
-  container: Element;
+  stage: Konva.Stage;
   actions: Array<IContextToolActionConfig>;
 }
 
 interface IContextToolActionConfig {
   label: string;
+  visible?: (target: Konva.Node) => boolean;
   handler: IContextToolHandler;
 }
 
@@ -635,22 +636,15 @@ class ContextTool {
 
     this.contextSubscription = new Subscription();
 
-    this.contextSubscription.add(
-      fromEvent(config.container, 'contextmenu')
-        .subscribe((evt: MouseEvent) => {
-          evt.preventDefault();
-          
-          this.contextElement = this.buildContextElement(
-            evt.clientX, 
-            evt.clientY
-          ); 
+    config.stage.on('contextmenu', (e: KonvaEventObject<MouseEvent>) => {
+      e.evt.preventDefault();
+      
+      this.contextElement = this.buildContextElement(e); 
+      this.contextOverlay = this.buildOverlay();
 
-          this.contextOverlay = this.buildOverlay();
-
-          this.contextOverlay.appendChild(this.contextElement);
-          document.body.appendChild(this.contextOverlay);
-        })
-    );
+      this.contextOverlay.appendChild(this.contextElement);
+      document.body.appendChild(this.contextOverlay);
+    });
   }
 
   public static create(config: IContextToolConfig): ContextTool {
@@ -659,20 +653,20 @@ class ContextTool {
     return instance;
   }
 
-  buildContextElement(x: number, y: number): HTMLDivElement {
+  buildContextElement(e: KonvaEventObject<MouseEvent>): HTMLDivElement {
     const panel: HTMLDivElement = document.createElement('div');
     panel.classList.add('context-panel');
 
     this.contextElementPosition = {
-      x: x,
-      y: y
+      x: e.evt.clientX,
+      y: e.evt.clientY
     };
 
     Object.assign(panel.style, {
       position: 'absolute',
       zIndex: '99999',
-      top: y + 'px',
-      left: x + 'px',
+      top: this.contextElementPosition.y + 'px',
+      left: this.contextElementPosition.x + 'px',
       background: '#252526',
       width: '200px',
       border: '1px solid rgba(255, 255, 255, .1)',
@@ -680,7 +674,13 @@ class ContextTool {
     });
 
     for (const item of this.contextItems) {
-      panel.appendChild(this.buildContextHandler(item));
+      if (item.visible) {
+        if(item.visible(e.target)) {
+          panel.appendChild(this.buildContextHandler(item));
+        }
+      } else {
+        panel.appendChild(this.buildContextHandler(item));
+      }
     }
 
     return panel;
@@ -763,10 +763,11 @@ class ContextTool {
 }
 
 const contextTool = ContextTool.create(<IContextToolConfig>{
-  container: stage.container(),
+  stage: stage,
   actions: [
     <IContextToolActionConfig>{
       label: 'Copy',
+      visible: (target: Konva.Node) => target.hasName('entity'),
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         clipboard.entities = selection.clone();
         clipboard.type = ContextToolType.Copy;
@@ -775,6 +776,7 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
     },
     <IContextToolActionConfig>{
       label: 'Cut',
+      visible: (target: Konva.Node) => target.hasName('entity'),
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         clipboard.entities = selection.toArray();
         clipboard.type = ContextToolType.Cut;
@@ -789,26 +791,26 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
       label: 'Paste',
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         if (clipboard.entities.length) {
-          const bounding: Konva.Group = selection.getBounding();
-          const children = bounding.children.toArray();
+          if (selection.isGroup()) {
+             const bounding: Konva.Group = selection.getBounding();
+              const children = bounding.children.toArray();
 
-          for (const entity of clipboard.entities) {
-            
-            if (clipboard.type === ContextToolType.Copy) {
-              layer1.add(entity);
-              console.log(entity);
-
-              const entityFromBounding = children.find((child) => {
+            /* const entityFromBounding = children.find((child) => {
                 child._id === entity.attrs.originalIndex;
               });
 
-              console.log(entityFromBounding);
+              console.log(entityFromBounding); */
+          }
+          
+          for (const entity of clipboard.entities) {
+            if (clipboard.type === ContextToolType.Copy) {
+              layer1.add(entity);
             }
 
             entity
               .visible(true)
-              .x(position.x - entity.width() / 2)
-              .y(position.y - entity.height() / 2);
+              .x(position.x)
+              .y(position.y);
           }
 
           layer.batchDraw();
