@@ -792,15 +792,6 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
   stage: stage,
   actions: [
     <IContextToolActionConfig>{
-      label: 'Copy',
-      visible: (target: Konva.Node) => target.hasName('entity'),
-      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-        clipboard.entities = selection.clone();
-        clipboard.type = ContextToolType.Copy;
-        console.log('copy');
-      }
-    },
-    <IContextToolActionConfig>{
       label: 'Cut',
       visible: (target: Konva.Node) => target.hasName('entity'),
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
@@ -811,6 +802,15 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
         selection.clear();
         layer.batchDraw();
         console.log('cut');
+      }
+    },
+    <IContextToolActionConfig>{
+      label: 'Copy',
+      visible: (target: Konva.Node) => target.hasName('entity'),
+      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+        clipboard.entities = selection.clone();
+        clipboard.type = ContextToolType.Copy;
+        console.log('copy');
       }
     },
     <IContextToolActionConfig>{
@@ -850,43 +850,34 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
     <IContextToolActionConfig>{
       label: 'Move forward',
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-        if (clipboard.entities.length) {
+        selection.nodes.forEach((n: Konva.Node) => {
+          n.moveUp();
+          selection.transformer.moveToTop();
+        });
 
-          selection.nodes.forEach((n: Konva.Node) => {
-            n.moveUp();
-            selection.transformer.moveToTop();
-          });
-
-          layer.batchDraw();
-        }
+        layer.batchDraw();
       }
     },
     <IContextToolActionConfig>{
       label: 'Move backward',
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-        if (clipboard.entities.length) {
+        selection.nodes.forEach((n: Konva.Node) => {
+          n.moveDown();
+          selection.transformer.moveToTop();
+        });
 
-          selection.nodes.forEach((n: Konva.Node) => {
-            n.moveDown();
-            selection.transformer.moveToTop();
-          });
-
-          layer.batchDraw();
-        }
+        layer.batchDraw();
       }
     },
     <IContextToolActionConfig>{
       label: 'Delete',
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-        if (clipboard.entities.length) {
+        selection.nodes.forEach((n: Konva.Node) => {
+          n.destroy();
+        });
 
-          selection.nodes.forEach((n: Konva.Node) => {
-            n.destroy();
-          });
-
-          selection.clear();
-          layer.batchDraw();
-        }
+        selection.clear();
+        layer.batchDraw();
       }
     }
   ]
