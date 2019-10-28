@@ -404,6 +404,13 @@ class KonvaSelection {
   }
 
   /**
+   * Get bounding group to get absolute position of selection
+   */
+  getBounding(): Konva.Group {
+    return this.bounding;
+  }
+
+  /**
    * Clear transformer and clear selection
    */
   clear(): void {
@@ -782,17 +789,26 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
       label: 'Paste',
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         if (clipboard.entities.length) {
+          const bounding: Konva.Group = selection.getBounding();
+          const children = bounding.children.toArray();
+
           for (const entity of clipboard.entities) {
+            
+            if (clipboard.type === ContextToolType.Copy) {
+              layer1.add(entity);
+              console.log(entity);
+
+              const entityFromBounding = children.find((child) => {
+                child._id === entity.attrs.originalIndex;
+              });
+
+              console.log(entityFromBounding);
+            }
+
             entity
               .visible(true)
               .x(position.x - entity.width() / 2)
               .y(position.y - entity.height() / 2);
-
-            console.log(clipboard.type);
-
-            if (clipboard.type === ContextToolType.Copy) {
-              layer1.add(entity);
-            }
           }
 
           layer.batchDraw();
