@@ -621,14 +621,14 @@ interface IPosition {
 }
 
 class ContextTool {
-  contextItems: Array<IContextToolActionConfig>;
+  actions: Array<IContextToolActionConfig>;
   contextElement: HTMLDivElement;
   contextElementPosition: IPosition;
   contextOverlay: HTMLDivElement;
   contextSubscription: Subscription;
   clipboard: IContextToolClipboard;
 
-  constructor(config: any) {
+  constructor(config: IContextToolConfig) {
     try {
       if (!config.stage) {
         throw new Error('Context Tool error: You must provide konva stage');
@@ -641,11 +641,14 @@ class ContextTool {
 
       this.contextSubscription = new Subscription();
 
+      // On stage contextmenu click, create context panel and overlay
       config.stage.on('contextmenu', (e: KonvaEventObject<MouseEvent>) => {
+
+        // Kill default context menu
         e.evt.preventDefault();
         
-        this.contextElement = this.buildContextElement(e); 
-        this.contextOverlay = this.buildOverlay();
+        this.contextElement = this.buildContextPanel(e); 
+        this.contextOverlay = this.buildContextOverlay();
 
         this.contextOverlay.appendChild(this.contextElement);
         document.body.appendChild(this.contextOverlay);
@@ -655,13 +658,19 @@ class ContextTool {
     }
   }
 
+  /**
+   * Create ContextTool instance
+   */
   public static create(config: IContextToolConfig): ContextTool {
     const instance: ContextTool = new ContextTool(config);
-    instance.contextItems = config.actions;
+    instance.actions = config.actions;
     return instance;
   }
 
-  buildContextElement(e: KonvaEventObject<MouseEvent>): HTMLDivElement {
+  /**
+   * Create context panel
+   */
+  buildContextPanel(e: KonvaEventObject<MouseEvent>): HTMLDivElement {
     const panel: HTMLDivElement = document.createElement('div');
     panel.classList.add('context-panel');
 
@@ -681,20 +690,23 @@ class ContextTool {
       borderRadius: '3px'
     });
 
-    for (const item of this.contextItems) {
+    for (const item of this.actions) {
       if (item.visible) {
         if(item.visible(e.target)) {
-          panel.appendChild(this.buildContextHandler(item));
+          panel.appendChild(this.buildContextPanelHandler(item));
         }
       } else {
-        panel.appendChild(this.buildContextHandler(item));
+        panel.appendChild(this.buildContextPanelHandler(item));
       }
     }
 
     return panel;
   }
 
-  buildContextHandler(item: IContextToolActionConfig): HTMLDivElement {
+  /**
+   * Create context panel handler
+   */
+  buildContextPanelHandler(item: IContextToolActionConfig): HTMLDivElement {
     const handler: HTMLDivElement = document.createElement('div');
     handler.classList.add('context-panel-item');
     handler.innerHTML = item.label;
@@ -732,7 +744,10 @@ class ContextTool {
     return handler;
   }
 
-  buildOverlay(): HTMLDivElement {
+  /**
+   * Create context panel overlay
+   */
+  buildContextOverlay(): HTMLDivElement {
     const overlay: HTMLDivElement = document.createElement('div');
     overlay.classList.add('context-panel-overlay');
 
@@ -757,6 +772,9 @@ class ContextTool {
     return overlay;
   }
 
+  /**
+   * Wrap handler fn to execute pre or post fn
+   */
   handlerWrapperFn(handler: IContextToolHandler) {
     handler(this.contextElementPosition, this.clipboard);
     
