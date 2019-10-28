@@ -694,6 +694,7 @@ class ContextTool {
     let i = 0;
 
     for (const group of this.actions) {
+      console.log(i === this.actions.length - 1);
       const groupElement: HTMLDivElement = this.buildContextPanelGroup(i === this.actions.length - 1);
 
       for (const action of group) {
@@ -713,6 +714,9 @@ class ContextTool {
     return panel;
   }
 
+  /**
+   * Create context panel group
+   */
   buildContextPanelGroup(last = false): HTMLDivElement {
     const group: HTMLDivElement = document.createElement('div');
     group.classList.add('context-panel-group');
@@ -824,6 +828,15 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
   actions: [
     [
       <IContextToolActionConfig>{
+        label: 'Copy',
+        visible: (target: Konva.Node) => target.hasName('entity'),
+        handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+          clipboard.entities = selection.clone();
+          clipboard.type = ContextToolType.Copy;
+          console.log('copy');
+        }
+      },
+      <IContextToolActionConfig>{
         label: 'Cut',
         visible: (target: Konva.Node) => target.hasName('entity'),
         handler: (position: IPosition, clipboard: IContextToolClipboard) => {
@@ -835,16 +848,7 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
           layer.batchDraw();
           console.log('cut');
         }
-      },
-      <IContextToolActionConfig>{
-        label: 'Copy',
-        visible: (target: Konva.Node) => target.hasName('entity'),
-        handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-          clipboard.entities = selection.clone();
-          clipboard.type = ContextToolType.Copy;
-          console.log('copy');
-        }
-      },
+      },  
       <IContextToolActionConfig>{
         label: 'Paste',
         visible: (target: Konva.Node, clipboard: IContextToolClipboard) => {
