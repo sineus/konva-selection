@@ -817,9 +817,11 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
       label: 'Paste',
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         if (clipboard.entities.length) {
+
+          // @todo: Keep element position on cut or copy (group mode)
           if (selection.isGroup()) {
-             const bounding: Konva.Group = selection.getBounding();
-              const children = bounding.children.toArray();
+            const bounding: Konva.Group = selection.getBounding();
+            const children = bounding.children.toArray();
 
             /* const entityFromBounding = children.find((child) => {
                 child._id === entity.attrs.originalIndex;
@@ -842,6 +844,48 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
           layer.batchDraw();
           selection.destroySelectBox();
           console.log('paste');
+        }
+      }
+    },
+    <IContextToolActionConfig>{
+      label: 'Move forward',
+      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+        if (clipboard.entities.length) {
+
+          selection.nodes.forEach((n: Konva.Node) => {
+            n.moveUp();
+            selection.transformer.moveToTop();
+          });
+
+          layer.batchDraw();
+        }
+      }
+    },
+    <IContextToolActionConfig>{
+      label: 'Move backward',
+      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+        if (clipboard.entities.length) {
+
+          selection.nodes.forEach((n: Konva.Node) => {
+            n.moveDown();
+            selection.transformer.moveToTop();
+          });
+
+          layer.batchDraw();
+        }
+      }
+    },
+    <IContextToolActionConfig>{
+      label: 'Delete',
+      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+        if (clipboard.entities.length) {
+
+          selection.nodes.forEach((n: Konva.Node) => {
+            n.destroy();
+          });
+
+          selection.clear();
+          layer.batchDraw();
         }
       }
     }
