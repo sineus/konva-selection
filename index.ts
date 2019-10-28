@@ -629,22 +629,30 @@ class ContextTool {
   clipboard: IContextToolClipboard;
 
   constructor(config: any) {
-    this.clipboard = {
-      entities: [],
-      type: null
+    try {
+      if (!config.stage) {
+        throw new Error('Context Tool error: You must provide konva stage');
+      }
+
+      this.clipboard = {
+        entities: [],
+        type: null
+      }
+
+      this.contextSubscription = new Subscription();
+
+      config.stage.on('contextmenu', (e: KonvaEventObject<MouseEvent>) => {
+        e.evt.preventDefault();
+        
+        this.contextElement = this.buildContextElement(e); 
+        this.contextOverlay = this.buildOverlay();
+
+        this.contextOverlay.appendChild(this.contextElement);
+        document.body.appendChild(this.contextOverlay);
+      });
+    } catch (e) {
+      console.error(e);
     }
-
-    this.contextSubscription = new Subscription();
-
-    config.stage.on('contextmenu', (e: KonvaEventObject<MouseEvent>) => {
-      e.evt.preventDefault();
-      
-      this.contextElement = this.buildContextElement(e); 
-      this.contextOverlay = this.buildOverlay();
-
-      this.contextOverlay.appendChild(this.contextElement);
-      document.body.appendChild(this.contextOverlay);
-    });
   }
 
   public static create(config: IContextToolConfig): ContextTool {
