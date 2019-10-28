@@ -611,7 +611,7 @@ interface IContextToolConfig {
 
 interface IContextToolActionConfig {
   label: string;
-  visible?: (target: Konva.Node) => boolean;
+  visible?: (target: Konva.Node, clipboard: IContextToolClipboard) => boolean;
   handler: IContextToolHandler;
 }
 
@@ -627,6 +627,7 @@ class ContextTool {
   contextOverlay: HTMLDivElement;
   contextSubscription: Subscription;
   clipboard: IContextToolClipboard;
+  closed$: Subject<void> = new Subject<void>();
 
   constructor(config: IContextToolConfig) {
     try {
@@ -692,7 +693,7 @@ class ContextTool {
 
     for (const item of this.actions) {
       if (item.visible) {
-        if(item.visible(e.target)) {
+        if(item.visible(e.target, this.clipboard)) {
           panel.appendChild(this.buildContextPanelHandler(item));
         }
       } else {
@@ -784,7 +785,12 @@ class ContextTool {
 
     if (this.contextOverlay) {
       this.contextOverlay.remove();
+      this.closed$.next();
     }
+  }
+
+  onClosed(): Observable<void> {
+    return this.closed$.asObservable();
   }
 }
 
@@ -815,6 +821,9 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
     },
     <IContextToolActionConfig>{
       label: 'Paste',
+      visible: (target: Konva.Node, clipboard: IContextToolClipboard) => {
+        return clipboard.entities.length > 0;
+      },
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         if (clipboard.entities.length) {
 
@@ -842,13 +851,13 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
           }
 
           layer.batchDraw();
-          selection.destroySelectBox();
           console.log('paste');
         }
       }
     },
     <IContextToolActionConfig>{
       label: 'Move forward',
+      visible: (target: Konva.Node) => target.hasName('entity'),
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         selection.nodes.forEach((n: Konva.Node) => {
           n.moveUp();
@@ -860,6 +869,7 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
     },
     <IContextToolActionConfig>{
       label: 'Move backward',
+      visible: (target: Konva.Node) => target.hasName('entity'),
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         selection.nodes.forEach((n: Konva.Node) => {
           n.moveDown();
@@ -871,6 +881,7 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
     },
     <IContextToolActionConfig>{
       label: 'Delete',
+      visible: (target: Konva.Node) => target.hasName('entity'),
       handler: (position: IPosition, clipboard: IContextToolClipboard) => {
         selection.nodes.forEach((n: Konva.Node) => {
           n.destroy();
@@ -882,3 +893,5 @@ const contextTool = ContextTool.create(<IContextToolConfig>{
     }
   ]
 });
+
+contextTool.onClosed().subscribe(() => selection.destroySelectBox());
