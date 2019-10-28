@@ -606,7 +606,7 @@ interface IContextToolHandler {
 
 interface IContextToolConfig {
   stage: Konva.Stage;
-  actions: Array<IContextToolActionConfig>;
+  actions: Array<Array<IContextToolActionConfig>>;
 }
 
 interface IContextToolActionConfig {
@@ -621,7 +621,7 @@ interface IPosition {
 }
 
 class ContextTool {
-  actions: Array<IContextToolActionConfig>;
+  actions: Array<Array<IContextToolActionConfig>>;
   contextElement: HTMLDivElement;
   contextElementPosition: IPosition;
   contextOverlay: HTMLDivElement;
@@ -691,17 +691,39 @@ class ContextTool {
       borderRadius: '3px'
     });
 
-    for (const item of this.actions) {
-      if (item.visible) {
-        if(item.visible(e.target, this.clipboard)) {
-          panel.appendChild(this.buildContextPanelHandler(item));
+    let i = 0;
+
+    for (const group of this.actions) {
+      const groupElement: HTMLDivElement = this.buildContextPanelGroup(i === this.actions.length - 1);
+
+      for (const action of group) {
+        if (action.visible) {
+          if(action.visible(e.target, this.clipboard)) {
+            groupElement.appendChild(this.buildContextPanelHandler(action));
+          }
+        } else {
+          groupElement.appendChild(this.buildContextPanelHandler(action));
         }
-      } else {
-        panel.appendChild(this.buildContextPanelHandler(item));
       }
+
+      panel.appendChild(groupElement);
+      i++;
     }
 
     return panel;
+  }
+
+  buildContextPanelGroup(last = false): HTMLDivElement {
+    const group: HTMLDivElement = document.createElement('div');
+    group.classList.add('context-panel-group');
+
+    if (!last) {
+      Object.assign(group.style, {
+        borderBottom: '1px solid rgba(255, 255, 255, .1)'
+      });
+    }
+
+    return group;
   }
 
   /**
@@ -789,6 +811,9 @@ class ContextTool {
     }
   }
 
+  /**
+   * Observe closed event (overlay click)
+   */
   onClosed(): Observable<void> {
     return this.closed$.asObservable();
   }
@@ -797,100 +822,106 @@ class ContextTool {
 const contextTool = ContextTool.create(<IContextToolConfig>{
   stage: stage,
   actions: [
-    <IContextToolActionConfig>{
-      label: 'Cut',
-      visible: (target: Konva.Node) => target.hasName('entity'),
-      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-        clipboard.entities = selection.toArray();
-        clipboard.type = ContextToolType.Cut;
-        clipboard.entities.forEach((entity: Konva.Shape) => entity.visible(false));
+    [
+      <IContextToolActionConfig>{
+        label: 'Cut',
+        visible: (target: Konva.Node) => target.hasName('entity'),
+        handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+          clipboard.entities = selection.toArray();
+          clipboard.type = ContextToolType.Cut;
+          clipboard.entities.forEach((entity: Konva.Shape) => entity.visible(false));
 
-        selection.clear();
-        layer.batchDraw();
-        console.log('cut');
-      }
-    },
-    <IContextToolActionConfig>{
-      label: 'Copy',
-      visible: (target: Konva.Node) => target.hasName('entity'),
-      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-        clipboard.entities = selection.clone();
-        clipboard.type = ContextToolType.Copy;
-        console.log('copy');
-      }
-    },
-    <IContextToolActionConfig>{
-      label: 'Paste',
-      visible: (target: Konva.Node, clipboard: IContextToolClipboard) => {
-        return clipboard.entities.length > 0;
+          selection.clear();
+          layer.batchDraw();
+          console.log('cut');
+        }
       },
-      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-        if (clipboard.entities.length) {
+      <IContextToolActionConfig>{
+        label: 'Copy',
+        visible: (target: Konva.Node) => target.hasName('entity'),
+        handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+          clipboard.entities = selection.clone();
+          clipboard.type = ContextToolType.Copy;
+          console.log('copy');
+        }
+      },
+      <IContextToolActionConfig>{
+        label: 'Paste',
+        visible: (target: Konva.Node, clipboard: IContextToolClipboard) => {
+          return clipboard.entities.length > 0;
+        },
+        handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+          if (clipboard.entities.length) {
 
-          // @todo: Keep element position on cut or copy (group mode)
-          if (selection.isGroup()) {
-            const bounding: Konva.Group = selection.getBounding();
-            const children = bounding.children.toArray();
+            // @todo: Keep element position on cut or copy (group mode)
+            if (selection.isGroup()) {
+              const bounding: Konva.Group = selection.getBounding();
+              const children = bounding.children.toArray();
 
-            /* const entityFromBounding = children.find((child) => {
-                child._id === entity.attrs.originalIndex;
-              });
+              /* const entityFromBounding = children.find((child) => {
+                  child._id === entity.attrs.originalIndex;
+                });
 
-              console.log(entityFromBounding); */
-          }
-          
-          for (const entity of clipboard.entities) {
-            if (clipboard.type === ContextToolType.Copy) {
-              layer1.add(entity);
+                console.log(entityFromBounding); */
+            }
+            
+            for (const entity of clipboard.entities) {
+              if (clipboard.type === ContextToolType.Copy) {
+                layer1.add(entity);
+              }
+
+              entity
+                .visible(true)
+                .x(position.x)
+                .y(position.y);
             }
 
-            entity
-              .visible(true)
-              .x(position.x)
-              .y(position.y);
+            layer.batchDraw();
+            console.log('paste');
           }
-
-          layer.batchDraw();
-          console.log('paste');
         }
       }
-    },
-    <IContextToolActionConfig>{
-      label: 'Move forward',
-      visible: (target: Konva.Node) => target.hasName('entity'),
-      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-        selection.nodes.forEach((n: Konva.Node) => {
-          n.moveUp();
-          selection.transformer.moveToTop();
-        });
+    ],
+    [
+      <IContextToolActionConfig>{
+        label: 'Delete',
+        visible: (target: Konva.Node) => target.hasName('entity'),
+        handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+          selection.nodes.forEach((n: Konva.Node) => {
+            n.destroy();
+          });
 
-        layer.batchDraw();
+          selection.clear();
+          layer.batchDraw();
+        }
       }
-    },
-    <IContextToolActionConfig>{
-      label: 'Move backward',
-      visible: (target: Konva.Node) => target.hasName('entity'),
-      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-        selection.nodes.forEach((n: Konva.Node) => {
-          n.moveDown();
-          selection.transformer.moveToTop();
-        });
+    ],
+    [
+      <IContextToolActionConfig>{
+        label: 'Move forward',
+        visible: (target: Konva.Node) => target.hasName('entity'),
+        handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+          selection.nodes.forEach((n: Konva.Node) => {
+            n.moveUp();
+            selection.transformer.moveToTop();
+          });
 
-        layer.batchDraw();
-      }
-    },
-    <IContextToolActionConfig>{
-      label: 'Delete',
-      visible: (target: Konva.Node) => target.hasName('entity'),
-      handler: (position: IPosition, clipboard: IContextToolClipboard) => {
-        selection.nodes.forEach((n: Konva.Node) => {
-          n.destroy();
-        });
+          layer.batchDraw();
+        }
+      },
+      <IContextToolActionConfig>{
+        label: 'Move backward',
+        visible: (target: Konva.Node) => target.hasName('entity'),
+        handler: (position: IPosition, clipboard: IContextToolClipboard) => {
+          selection.nodes.forEach((n: Konva.Node) => {
+            n.moveDown();
+            selection.transformer.moveToTop();
+          });
 
-        selection.clear();
-        layer.batchDraw();
+          layer.batchDraw();
+        }
       }
-    }
+    ]
   ]
 });
 
